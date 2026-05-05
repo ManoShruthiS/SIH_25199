@@ -1,7 +1,7 @@
 # Local Development Overrides
 kael.py
-.kael_logs.txt
-kael_state.json
+.developer_logs.txt
+developer_state.json
 
 # Dependencies
 node_modules/

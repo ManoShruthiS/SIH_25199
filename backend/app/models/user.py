@@ -5,7 +5,7 @@ from sqlalchemy import Column, Integer, String, Boolean, DateTime, Table, Foreig
 from sqlalchemy.orm import relationship
 from werkzeug.security import generate_password_hash, check_password_hash
 
-from backend.app.db.base import Base
+from app.db.base_class import Base
 
 
 # Association table for User-Role many-to-many relationship
