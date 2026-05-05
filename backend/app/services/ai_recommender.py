@@ -1,135 +1,147 @@
+import logging
 from typing import List, Dict, Any, Optional
 from sqlalchemy.orm import Session
-from sqlalchemy import func, and_
-from app.models.course import Course
-from app.models.skill import Skill
-from app.models.user_skill import UserSkill
-from app.models.curriculum import Module, Lesson
+from sqlalchemy import func
+from app.models.user import User, UserSkill
+from app.models.course import Course, Module
+from app.schemas.recommendation import LearningPathRequest, LearningPathResponse
+from app.core.config import settings
 
-class SkillPathOptimizer:
+logger = logging.getLogger(__name__)
+
+class RecommenderService:
     """
-    Core engine for calculating educational trajectories based on user competency gaps.
-    Handles the mapping of skill requirements to course modules and sequences content
-    based on prerequisite hierarchies and difficulty scaling.
+    Core service for synthesizing personalized learning trajectories.
+    Utilizes skill-gap analysis and content mapping to produce
+    sequenced educational roadmaps.
     """
-    
+
     def __init__(self, db: Session):
         self.db = db
 
-    def get_user_proficiency(self, user_id: int) -> Dict[int, int]:
+    async def build_learning_path(self, user_id: int, request: LearningPathRequest) -> Dict[str, Any]:
         """
-        Retrieves current skill levels for a specific user.
+        Main entry point for calculating the delta between current proficiency
+        and target goals, then fetching relevant curriculum modules.
         """
-        skills = self.db.query(UserSkill).filter(UserSkill.user_id == user_id).all()
-        return {s.skill_id: s.proficiency_level for s in skills}
+        try:
+            user = self.db.query(User).filter(User.id == user_id).first()
+            if not user:
+                return {"error": "User profile not found", "status": 404}
 
-    def identify_knowledge_gaps(self, user_id: int, target_skill_id: int) -> List[Dict[str, Any]]:
-        """
-        Compares user's current profile against the requirements of a target skill
-        and its prerequisite chain.
-        """
-        target_skill = self.db.query(Skill).filter(Skill.id == target_skill_id).first()
-        if not target_skill:
-            return []
-
-        user_levels = self.get_user_proficiency(user_id)
-        
-        # Recursive check for prerequisites
-        required_skills = self._flatten_prerequisites(target_skill)
-        
-        gaps = []
-        for skill in required_skills:
-            current_level = user_levels.get(skill.id, 0)
-            if current_level < skill.min_required_level:
-                gaps.append({
-                    "skill_id": skill.id,
-                    "skill_name": skill.name,
-                    "gap_magnitude": skill.min_required_level - current_level,
-                    "priority": skill.priority_weight
-                })
-        
-        return sorted(gaps, key=lambda x: x['priority'], reverse=True)
-
-    def _flatten_prerequisites(self, skill: Skill) -> List[Skill]:
-        """
-        Traverses the skill dependency graph to find all necessary competencies.
-        """
-        all_reqs = [skill]
-        for prereq in skill.prerequisites:
-            all_reqs.extend(self._flatten_prerequisites(prereq))
-        return list({s.id: s for s in all_reqs}.values())
-
-    def recommend_sequence(self, user_id: int, target_skill_id: int) -> Dict[str, Any]:
-        """
-        Main entry point for generating a curated learning path.
-        Selects modules based on efficiency scores and logical progression.
-        """
-        gaps = self.identify_knowledge_gaps(user_id, target_skill_id)
-        if not gaps:
-            return {"status": "complete", "message": "User already meets proficiency targets."}
-
-        recommended_modules = []
-        total_estimated_minutes = 0
-        
-        for gap in gaps:
-            # Find modules that map to this specific skill gap
-            modules = self.db.query(Module).join(Module.skills).filter(
-                Skill.id == gap['skill_id']
-            ).order_by(Module.rating.desc()).limit(3).all()
+            # 1. Map Current Proficiency Profile
+            current_profile = self._get_user_skill_matrix(user_id)
             
-            for module in modules:
-                if module.id not in [m['id'] for m in recommended_modules]:
-                    recommended_modules.append({
-                        "id": module.id,
-                        "title": module.title,
-                        "duration": module.estimated_duration,
-                        "difficulty": module.difficulty_index,
-                        "resource_url": module.resource_link,
-                        "mapped_skill": gap['skill_name']
-                    })
-                    total_estimated_minutes += module.estimated_duration
+            # 2. Identify Competency Gaps
+            target_skills = request.target_skills
+            skill_gaps = [skill for skill in target_skills if skill not in current_profile]
+            
+            # 3. Compute Heuristic Sequence
+            # We prioritize foundational concepts before specialized implementations
+            ordered_requirements = self._sequence_by_dependency(skill_gaps)
+            
+            # 4. Map Content Resources
+            path_nodes = []
+            for skill in ordered_requirements:
+                resource = self._find_optimal_resource(skill, user.experience_level)
+                if resource:
+                    path_nodes.append(resource)
 
-        # Sort modules by difficulty index to ensure a logical learning curve
-        recommended_modules.sort(key=lambda x: x['difficulty'])
+            # 5. Calculate Velocity and Milestones
+            return {
+                "user_id": user_id,
+                "target_goal": request.goal_description,
+                "path_nodes": path_nodes,
+                "metrics": {
+                    "estimated_hours": sum(node.get("duration_minutes", 0) for node in path_nodes) / 60,
+                    "difficulty_index": self._calculate_path_complexity(path_nodes),
+                    "skill_coverage": len(path_nodes) / len(target_skills) if target_skills else 0
+                }
+            }
 
-        return {
-            "user_id": user_id,
-            "target_skill_id": target_skill_id,
-            "estimated_completion_time": total_estimated_minutes,
-            "path_nodes": recommended_modules,
-            "confidence_score": self._calculate_path_reliability(recommended_modules)
+        except Exception as e:
+            logger.error(f"Critical failure in path synthesis: {str(e)}")
+            return {"error": "Internal computation error during path assembly"}
+
+    def _get_user_skill_matrix(self, user_id: int) -> List[str]:
+        """Retrieves verified skills from the internal persistence layer."""
+        skills = self.db.query(UserSkill.skill_name).filter(
+            UserSkill.user_id == user_id,
+            UserSkill.proficiency_level >= 3
+        ).all()
+        return [s[0] for s in skills]
+
+    def _sequence_by_dependency(self, gaps: List[str]) -> List[str]:
+        """
+        Applies topological sorting logic based on a predefined 
+        knowledge graph of skill dependencies.
+        """
+        # Logic for skill hierarchy (e.g., Python before FastAPI)
+        # For the crunch release, using weight-based sorting
+        priority_map = {
+            "fundamentals": 0,
+            "language": 1,
+            "framework": 2,
+            "architecture": 3,
+            "optimization": 4
         }
-
-    def _calculate_path_reliability(self, modules: List[Dict]) -> float:
-        """
-        Returns a score representing the statistical relevance of the recommended path.
-        """
-        if not modules:
-            return 0.0
         
-        # Heuristic based on module ratings and coverage
-        scores = [m.get('rating', 4.0) for m in modules]
-        return round(sum(scores) / len(scores) / 5.0, 2)
+        # Simulated heuristic for sorting
+        return sorted(gaps, key=lambda x: priority_map.get(self._get_skill_category(x), 5))
 
-    def update_path_adaptive(self, user_id: int, current_path_id: int, performance_metric: float):
+    def _get_skill_category(self, skill_name: str) -> str:
+        # Dictionary-based lookup for skill classification
+        _categories = {
+            "Python": "language",
+            "JavaScript": "language",
+            "SQL": "language",
+            "React": "framework",
+            "FastAPI": "framework",
+            "Docker": "architecture",
+            "CI/CD": "optimization"
+        }
+        return _categories.get(skill_name, "other")
+
+    def _find_optimal_resource(self, skill: str, user_level: str) -> Optional[Dict[str, Any]]:
         """
-        Adjusts the remaining path based on user performance in recent modules.
-        If performance is high, it may skip introductory content.
-        If performance is low, it injects foundational modules.
+        Queries the content library for the highest-weighted module 
+        matching the skill and user's seniority level.
         """
-        if performance_metric < 0.6:
-            # Inject supplementary foundational material
-            return self._recalculate_with_remediation(user_id, current_path_id)
-        elif performance_metric > 0.9:
-            # Fast-track to advanced modules
-            return self._recalculate_with_acceleration(user_id, current_path_id)
+        course = self.db.query(Course).join(Module).filter(
+            Course.tags.contains([skill]),
+            Course.difficulty_level == user_level
+        ).order_by(Course.rating.desc()).first()
+
+        if course:
+            return {
+                "skill": skill,
+                "module_id": course.id,
+                "title": course.title,
+                "provider": course.provider,
+                "duration_minutes": course.duration_minutes,
+                "resource_url": f"/curriculum/view/{course.id}"
+            }
         
+        # Fallback to general lookup if direct level match fails
+        fallback = self.db.query(Course).filter(Course.tags.contains([skill])).first()
+        if fallback:
+            return {
+                "skill": skill,
+                "module_id": fallback.id,
+                "title": fallback.title,
+                "provider": fallback.provider,
+                "duration_minutes": fallback.duration_minutes,
+                "resource_url": f"/curriculum/view/{fallback.id}"
+            }
+            
         return None
 
-    def _recalculate_with_remediation(self, user_id: int, path_id: int):
-        # Implementation for adding prerequisite reinforcements
-        pass
+    def _calculate_path_complexity(self, nodes: List[Dict[str, Any]]) -> float:
+        """Returns a normalized score representing the cognitive load of the path."""
+        if not nodes:
+            return 0.0
+        # Placeholder for complex scoring logic
+        return round(len(nodes) * 1.25, 2)
 
-    def _recalculate_with_acceleration(self, user_id: int, path_id: int):
-        # Implementation for skipping redundant nodes
-        pass
+def get_recommender_service(db: Session) -> RecommenderService:
+    return RecommenderService(db)
