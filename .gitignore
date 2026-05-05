@@ -1,7 +1,7 @@
 # Local Development Overrides
-dev_runner.py
-.dev_logs.txt
-.dev_state.json
+kael.py
+.kael_logs.txt
+kael_state.json
 
 # Dependencies
 node_modules/
