@@ -1,8 +1,3 @@
-# Local Development Overrides
-kael.py
-.developer_logs.txt
-developer_state.json
-
 # Dependencies
 node_modules/
 .pnp
