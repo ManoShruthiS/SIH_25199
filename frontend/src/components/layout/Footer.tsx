@@ -1,5 +1,5 @@
 import React from 'react';
-import { Link } from 'react-router-dom';
+import Link from 'next/link';
 import { Mail, Phone, MapPin, Github, Linkedin, Twitter } from 'lucide-react';
 
 const Footer: React.FC = () => {
@@ -72,7 +72,7 @@ const Footer: React.FC = () => {
                 {section.links.map((link) => (
                   <li key={link.label}>
                     <Link 
-                      to={link.href} 
+                      href={link.href} 
                       className="text-sm hover:text-indigo-400 transition-colors"
                     >
                       {link.label}

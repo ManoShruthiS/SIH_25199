@@ -9,10 +9,10 @@ import {
   PlayCircle,
   CheckCircle2
 } from 'lucide-react';
-import DashboardLayout from '@/components/layout/DashboardLayout';
-import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
-import { Progress } from '@/components/ui/progress';
-import { Button } from '@/components/ui/button';
+import AppLayout from '../../components/layout/AppLayout';
+import { Card, CardHeader, CardTitle, CardContent } from '../../components/ui/card';
+import { Progress } from '../../components/ui/progress';
+import { Button } from '../../components/ui/button';
 
 const Dashboard = () => {
   const [userData, setUserData] = useState({
@@ -49,7 +49,7 @@ const Dashboard = () => {
   ];
 
   return (
-    <DashboardLayout title="Learner Dashboard">
+    <AppLayout>
       <div className="flex flex-col space-y-8">
         {/* Welcome Section */}
         <section>
@@ -104,7 +104,7 @@ const Dashboard = () => {
                   <Clock className="h-5 w-5 text-purple-600" />
                 </div>
               </div>
-            </div>
+            </CardContent>
           </Card>
           <Card>
             <CardContent className="pt-6">
@@ -248,7 +248,7 @@ const Dashboard = () => {
           </div>
         </div>
       </div>
-    </DashboardLayout>
+    </AppLayout>
   );
 };
 

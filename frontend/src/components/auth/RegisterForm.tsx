@@ -3,7 +3,7 @@ import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
 import { Eye, EyeOff, Loader2, User, Mail, Lock, ShieldCheck } from 'lucide-react';
-import { useNavigate } from 'react-router-dom';
+import { useRouter } from 'next/navigation';
 
 const registerSchema = z.object({
   name: z.string().min(2, 'Full name is required'),
@@ -25,7 +25,7 @@ const RegisterForm: React.FC = () => {
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [serverError, setServerError] = useState<string | null>(null);
-  const navigate = useNavigate();
+  const router = useRouter();
 
   const {
     register,
@@ -63,9 +63,7 @@ const RegisterForm: React.FC = () => {
       }
 
       // Success redirect to login with state message
-      navigate('/login', { 
-        state: { message: 'Account created successfully. Please sign in to continue.' } 
-      });
+      router.push('/login?message=Account+created+successfully.+Please+sign+in+to+continue.');
     } catch (err: any) {
       setServerError(err.message || 'An unexpected error occurred. Please try again.');
     } finally {
@@ -198,7 +196,7 @@ const RegisterForm: React.FC = () => {
             Already have an account?{' '}
             <button 
               type="button"
-              onClick={() => navigate('/login')}
+              onClick={() => router.push('/login')}
               className="font-bold text-blue-600 hover:text-blue-500 transition-colors"
             >
               Sign In

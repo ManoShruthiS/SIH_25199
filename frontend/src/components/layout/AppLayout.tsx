@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Outlet, useLocation } from 'react-router-dom';
+import { useRouter } from 'next/router';
 import Sidebar from './Sidebar';
 import Navbar from './Navbar';
 
@@ -10,15 +10,15 @@ import Navbar from './Navbar';
  * Acts as the primary shell for the application, providing persistent 
  * navigation and layout structure across all internal views.
  */
-const AppLayout: React.FC = () => {
+export default function AppLayout({ children }: { children: React.ReactNode }) {
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
-  const location = useLocation();
+  const router = useRouter();
 
   // Close mobile menu on route change
   useEffect(() => {
     setIsMobileMenuOpen(false);
-  }, [location]);
+  }, [router.pathname]);
 
   // Handle window resizing to adjust layout state
   useEffect(() => {
@@ -68,7 +68,7 @@ const AppLayout: React.FC = () => {
         <main className="flex-grow">
           <div className="mx-auto max-w-screen-2xl p-4 md:p-6 lg:p-10">
             <div className="fade-in">
-              <Outlet />
+              {children}
             </div>
           </div>
         </main>
@@ -100,6 +100,4 @@ const AppLayout: React.FC = () => {
       )}
     </div>
   );
-};
-
-export default AppLayout;
+};
