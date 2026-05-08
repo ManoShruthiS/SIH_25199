@@ -24,12 +24,12 @@ class CRUDSkill(CRUDBase[Skill, SkillCreate, SkillUpdate]):
         self, db: Session, *, category: str, skip: int = 0, limit: int = 100
     ) -> List[Skill]:
         """
-        Batch retrieval of skills filtered by a specific category.
+        Batch retrieval of skills filtered by a specific sector.
         Used for populating dropdowns or filtering resource requirements.
         """
         return (
             db.query(Skill)
-            .filter(Skill.category == category)
+            .filter(Skill.sector == category)
             .offset(skip)
             .limit(limit)
             .all()

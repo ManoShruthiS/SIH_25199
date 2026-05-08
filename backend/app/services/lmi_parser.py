@@ -3,12 +3,32 @@ import pandas as pd
 import logging
 from datetime import datetime
 from typing import List, Dict, Any, Optional
-from pydantic import ValidationError
-from app.schemas.lmi import LMIDataPoint, LMITrendAnalysis
+from pydantic import BaseModel, ValidationError
 
 # Initialize logging for the ingestion service
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
+
+
+class LMIDataPoint(BaseModel):
+    """Schema for a single Labour Market Intelligence data point."""
+    occupation_code: str
+    occupation_title: Optional[str] = None
+    location_id: Optional[str] = None
+    median_salary: float = 0.0
+    job_openings: int = 0
+    growth_rate: float = 0.0
+    timestamp: Optional[datetime] = None
+
+
+class LMITrendAnalysis(BaseModel):
+    """Schema for aggregated trend analysis output."""
+    top_skills: List[str] = []
+    high_growth_sectors: List[Dict[str, Any]] = []
+    average_salary: float = 0.0
+    data_volume: int = 0
+    last_updated: Optional[datetime] = None
+
 
 class LMIParser:
     """
@@ -94,7 +114,7 @@ class LMIParser:
         if not data_points:
             return LMITrendAnalysis(top_skills=[], high_growth_sectors=[], average_salary=0)
 
-        df = pd.DataFrame([p.dict() for p in data_points])
+        df = pd.DataFrame([p.model_dump() for p in data_points])
         
         avg_salary = df["median_salary"].mean()
         high_growth = df.nlargest(5, "growth_rate")[["occupation_title", "growth_rate"]].to_dict('records')

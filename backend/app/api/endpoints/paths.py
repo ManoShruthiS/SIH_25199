@@ -1,26 +1,18 @@
 from fastapi import APIRouter, Depends, HTTPException, status, Query
 from sqlalchemy.orm import Session
 from typing import List, Optional
-from uuid import UUID
 
 from app.api import deps
-from app.db.session import get_db
 from app.models.user import User
-from app.schemas.path import (
-    LearningPathCreate, 
-    LearningPathUpdate, 
-    LearningPathResponse,
-    PathStepUpdate
-)
-from app.crud import crud_path
-from app.services.path_engine import generator
+from app.models.learning_path import LearningPath
+from app.schemas.learning_path import LearningPath as LearningPathSchema, LearningPathCreate, LearningPathUpdate
 
 router = APIRouter()
 
-@router.post("/", response_model=LearningPathResponse, status_code=status.HTTP_201_CREATED)
+@router.post("/", response_model=LearningPathSchema, status_code=status.HTTP_201_CREATED)
 def create_learning_path(
     *,
-    db: Session = Depends(get_db),
+    db: Session = Depends(deps.get_db),
     path_in: LearningPathCreate,
     current_user: User = Depends(deps.get_current_active_user)
 ):
@@ -28,31 +20,29 @@ def create_learning_path(
     Generate a new personalized learning path based on user goals and skill level.
     """
     # Check if a similar path already exists to avoid redundancy
-    existing_path = crud_path.get_by_title_and_user(
-        db, title=path_in.title, user_id=current_user.id
-    )
+    existing_path = db.query(LearningPath).filter(
+        LearningPath.title == path_in.title,
+        LearningPath.user_id == current_user.id
+    ).first()
     if existing_path:
-        throw HTTPException(
+        raise HTTPException(
             status_code=400,
             detail="A learning path with this title already exists."
         )
     
-    # The generation engine processes the roadmap, resources, and timeline
-    path_data = generator.generate_structured_path(
-        user_id=current_user.id,
-        goal=path_in.title,
+    db_obj = LearningPath(
+        title=path_in.title,
         description=path_in.description,
-        difficulty=path_in.difficulty,
-        estimated_hours_per_week=path_in.estimated_hours_per_week
+        user_id=current_user.id,
     )
-    
-    return crud_path.create_with_owner(
-        db=db, obj_in=path_in, owner_id=current_user.id, generated_content=path_data
-    )
+    db.add(db_obj)
+    db.commit()
+    db.refresh(db_obj)
+    return db_obj
 
-@router.get("/", response_model=List[LearningPathResponse])
+@router.get("/", response_model=List[LearningPathSchema])
 def read_learning_paths(
-    db: Session = Depends(get_db),
+    db: Session = Depends(deps.get_db),
     skip: int = 0,
     limit: int = 100,
     current_user: User = Depends(deps.get_current_active_user)
@@ -60,94 +50,68 @@ def read_learning_paths(
     """
     Retrieve all learning paths for the authenticated user.
     """
-    return crud_path.get_multi_by_owner(
-        db=db, owner_id=current_user.id, skip=skip, limit=limit
-    )
+    return db.query(LearningPath).filter(
+        LearningPath.user_id == current_user.id
+    ).offset(skip).limit(limit).all()
 
-@router.get("/{path_id}", response_model=LearningPathResponse)
+@router.get("/{path_id}", response_model=LearningPathSchema)
 def read_learning_path(
     *,
-    db: Session = Depends(get_db),
-    path_id: UUID,
+    db: Session = Depends(deps.get_db),
+    path_id: int,
     current_user: User = Depends(deps.get_current_active_user)
 ):
     """
     Get detailed information for a specific learning path.
     """
-    path = crud_path.get(db=db, id=path_id)
+    path = db.query(LearningPath).filter(LearningPath.id == path_id).first()
     if not path:
         raise HTTPException(status_code=404, detail="Learning path not found")
-    if path.owner_id != current_user.id:
+    if path.user_id != current_user.id:
         raise HTTPException(status_code=403, detail="Not enough permissions")
     return path
 
-@router.patch("/{path_id}", response_model=LearningPathResponse)
+@router.patch("/{path_id}", response_model=LearningPathSchema)
 def update_learning_path(
     *,
-    db: Session = Depends(get_db),
-    path_id: UUID,
+    db: Session = Depends(deps.get_db),
+    path_id: int,
     path_in: LearningPathUpdate,
     current_user: User = Depends(deps.get_current_active_user)
 ):
     """
     Update the metadata or status of a learning path.
     """
-    path = crud_path.get(db=db, id=path_id)
+    path = db.query(LearningPath).filter(LearningPath.id == path_id).first()
     if not path:
         raise HTTPException(status_code=404, detail="Learning path not found")
-    if path.owner_id != current_user.id:
-        raise HTTPException(status_code=403, detail="Not enough permissions")
-    return crud_path.update(db=db, db_obj=path, obj_in=path_in)
-
-@router.patch("/{path_id}/steps/{step_id}", response_model=LearningPathResponse)
-def update_path_step_progress(
-    *,
-    db: Session = Depends(get_db),
-    path_id: UUID,
-    step_id: UUID,
-    step_in: PathStepUpdate,
-    current_user: User = Depends(deps.get_current_active_user)
-):
-    """
-    Mark a specific step in the learning path as completed or update its progress.
-    """
-    path = crud_path.get(db=db, id=path_id)
-    if not path:
-        raise HTTPException(status_code=404, detail="Learning path not found")
-    if path.owner_id != current_user.id:
+    if path.user_id != current_user.id:
         raise HTTPException(status_code=403, detail="Not enough permissions")
     
-    updated_path = crud_path.update_step_status(
-        db=db, db_obj=path, step_id=step_id, status_update=step_in
-    )
-    return updated_path
+    update_data = path_in.model_dump(exclude_unset=True)
+    for field, value in update_data.items():
+        setattr(path, field, value)
+    db.add(path)
+    db.commit()
+    db.refresh(path)
+    return path
 
 @router.delete("/{path_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_learning_path(
     *,
-    db: Session = Depends(get_db),
-    path_id: UUID,
+    db: Session = Depends(deps.get_db),
+    path_id: int,
     current_user: User = Depends(deps.get_current_active_user)
 ):
     """
     Remove a learning path from the user's profile.
     """
-    path = crud_path.get(db=db, id=path_id)
+    path = db.query(LearningPath).filter(LearningPath.id == path_id).first()
     if not path:
         raise HTTPException(status_code=404, detail="Learning path not found")
-    if path.owner_id != current_user.id:
+    if path.user_id != current_user.id:
         raise HTTPException(status_code=403, detail="Not enough permissions")
     
-    crud_path.remove(db=db, id=path_id)
+    db.delete(path)
+    db.commit()
     return None
-
-@router.get("/recommendations/trending", response_model=List[LearningPathResponse])
-def get_trending_paths(
-    db: Session = Depends(get_db),
-    limit: int = Query(5, gt=0, le=20),
-    current_user: User = Depends(deps.get_current_active_user)
-):
-    """
-    Fetch trending public learning paths that match user interests.
-    """
-    return crud_path.get_trending(db, user_category=current_user.interest_category, limit=limit)

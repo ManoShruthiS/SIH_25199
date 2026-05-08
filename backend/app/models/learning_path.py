@@ -1,10 +1,10 @@
 from sqlalchemy import Column, String, ForeignKey, DateTime, Enum, Table, Integer
-from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import relationship
 from datetime import datetime
-import uuid
-from app.db.base_class import Base
 import enum
+
+from app.db.base_class import Base
+
 
 class PathStatus(enum.Enum):
     NOT_STARTED = "not_started"
@@ -16,8 +16,8 @@ class PathStatus(enum.Enum):
 learning_path_courses = Table(
     "learning_path_courses",
     Base.metadata,
-    Column("learning_path_id", UUID(as_uuid=True), ForeignKey("learning_path.id", ondelete="CASCADE"), primary_key=True),
-    Column("course_id", UUID(as_uuid=True), ForeignKey("course.id", ondelete="CASCADE"), primary_key=True),
+    Column("learning_path_id", Integer, ForeignKey("learning_path.id", ondelete="CASCADE"), primary_key=True),
+    Column("course_id", Integer, ForeignKey("courses.id", ondelete="CASCADE"), primary_key=True),
     Column("order_index", Integer, default=0),
     Column("added_at", DateTime, default=datetime.utcnow)
 )
@@ -29,8 +29,8 @@ class LearningPath(Base):
     """
     __tablename__ = "learning_path"
 
-    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4, index=True)
-    user_id = Column(UUID(as_uuid=True), ForeignKey("user.id", ondelete="CASCADE"), nullable=False, index=True)
+    id = Column(Integer, primary_key=True, index=True, autoincrement=True)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
     title = Column(String(255), nullable=False)
     description = Column(String(1000), nullable=True)
     

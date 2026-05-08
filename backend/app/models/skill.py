@@ -52,5 +52,4 @@ class Skill(Base):
     def __repr__(self):
         return f"<Skill(code='{self.code}', name='{self.name}', level={self.nsqf_level})>"
 
-    class Config:
-        orm_mode = True
+

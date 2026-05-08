@@ -71,7 +71,11 @@ def reset_password(
     """
     Reset password using recovery token.
     """
-    email = security.verify_password_reset_token(token)
+    try:
+        payload = security.jwt.decode(token, settings.SECRET_KEY, algorithms=[security.ALGORITHM])
+        email = payload.get("sub")
+    except Exception:
+        email = None
     if not email:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -88,5 +92,8 @@ def reset_password(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Inactive user",
         )
-    crud.user.update_password(db, db_user=user, new_password=new_password)
+    hashed = security.get_password_hash(new_password)
+    user.hashed_password = hashed
+    db.add(user)
+    db.commit()
     return {"msg": "Password updated successfully"}

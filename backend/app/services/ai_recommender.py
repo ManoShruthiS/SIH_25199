@@ -2,9 +2,9 @@ import logging
 from typing import List, Dict, Any, Optional
 from sqlalchemy.orm import Session
 from sqlalchemy import func
-from app.models.user import User, UserSkill
+from app.models.user import User
 from app.models.course import Course, Module
-from app.schemas.recommendation import LearningPathRequest, LearningPathResponse
+from app.models.skill import Skill
 from app.core.config import settings
 
 logger = logging.getLogger(__name__)
@@ -19,7 +19,7 @@ class RecommenderService:
     def __init__(self, db: Session):
         self.db = db
 
-    async def build_learning_path(self, user_id: int, request: LearningPathRequest) -> Dict[str, Any]:
+    async def build_learning_path(self, user_id: int, target_skills: List[str], goal_description: str = "") -> Dict[str, Any]:
         """
         Main entry point for calculating the delta between current proficiency
         and target goals, then fetching relevant curriculum modules.
@@ -29,28 +29,24 @@ class RecommenderService:
             if not user:
                 return {"error": "User profile not found", "status": 404}
 
-            # 1. Map Current Proficiency Profile
-            current_profile = self._get_user_skill_matrix(user_id)
+            # 1. Identify Competency Gaps
+            skill_gaps = target_skills  # Simplified: treat all targets as gaps for now
             
-            # 2. Identify Competency Gaps
-            target_skills = request.target_skills
-            skill_gaps = [skill for skill in target_skills if skill not in current_profile]
-            
-            # 3. Compute Heuristic Sequence
+            # 2. Compute Heuristic Sequence
             # We prioritize foundational concepts before specialized implementations
             ordered_requirements = self._sequence_by_dependency(skill_gaps)
             
-            # 4. Map Content Resources
+            # 3. Map Content Resources
             path_nodes = []
-            for skill in ordered_requirements:
-                resource = self._find_optimal_resource(skill, user.experience_level)
+            for skill_name in ordered_requirements:
+                resource = self._find_optimal_resource(skill_name)
                 if resource:
                     path_nodes.append(resource)
 
-            # 5. Calculate Velocity and Milestones
+            # 4. Calculate Velocity and Milestones
             return {
                 "user_id": user_id,
-                "target_goal": request.goal_description,
+                "target_goal": goal_description,
                 "path_nodes": path_nodes,
                 "metrics": {
                     "estimated_hours": sum(node.get("duration_minutes", 0) for node in path_nodes) / 60,
@@ -62,14 +58,6 @@ class RecommenderService:
         except Exception as e:
             logger.error(f"Critical failure in path synthesis: {str(e)}")
             return {"error": "Internal computation error during path assembly"}
-
-    def _get_user_skill_matrix(self, user_id: int) -> List[str]:
-        """Retrieves verified skills from the internal persistence layer."""
-        skills = self.db.query(UserSkill.skill_name).filter(
-            UserSkill.user_id == user_id,
-            UserSkill.proficiency_level >= 3
-        ).all()
-        return [s[0] for s in skills]
 
     def _sequence_by_dependency(self, gaps: List[str]) -> List[str]:
         """
@@ -102,36 +90,23 @@ class RecommenderService:
         }
         return _categories.get(skill_name, "other")
 
-    def _find_optimal_resource(self, skill: str, user_level: str) -> Optional[Dict[str, Any]]:
+    def _find_optimal_resource(self, skill_name: str) -> Optional[Dict[str, Any]]:
         """
         Queries the content library for the highest-weighted module 
-        matching the skill and user's seniority level.
+        matching the skill name.
         """
-        course = self.db.query(Course).join(Module).filter(
-            Course.tags.contains([skill]),
-            Course.difficulty_level == user_level
-        ).order_by(Course.rating.desc()).first()
+        course = self.db.query(Course).filter(
+            Course.title.ilike(f"%{skill_name}%"),
+            Course.is_published == True
+        ).order_by(Course.rating_avg.desc()).first()
 
         if course:
             return {
-                "skill": skill,
-                "module_id": course.id,
+                "skill": skill_name,
+                "course_id": course.id,
                 "title": course.title,
-                "provider": course.provider,
-                "duration_minutes": course.duration_minutes,
+                "difficulty": course.difficulty_level,
                 "resource_url": f"/curriculum/view/{course.id}"
-            }
-        
-        # Fallback to general lookup if direct level match fails
-        fallback = self.db.query(Course).filter(Course.tags.contains([skill])).first()
-        if fallback:
-            return {
-                "skill": skill,
-                "module_id": fallback.id,
-                "title": fallback.title,
-                "provider": fallback.provider,
-                "duration_minutes": fallback.duration_minutes,
-                "resource_url": f"/curriculum/view/{fallback.id}"
             }
             
         return None

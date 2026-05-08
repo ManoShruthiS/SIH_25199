@@ -3,11 +3,8 @@ from fastapi import APIRouter
 from app.api.endpoints import (
     auth,
     users,
-    analytics,
-    reports,
-    data_stream,
-    system,
-    integration
+    skills,
+    paths,
 )
 
 # Main API Router for SIH 25199 Enterprise Project
@@ -28,37 +25,16 @@ api_router.include_router(
     tags=["User Management"]
 )
 
-# Core Analytics Engine endpoints
+# NSQF Skills Catalog
 api_router.include_router(
-    analytics.router, 
-    prefix="/analytics", 
-    tags=["Analytics Engine"]
+    skills.router, 
+    prefix="/skills", 
+    tags=["Skills Catalog"]
 )
 
-# Automated Reporting and Export functionality
+# Personalized Learning Paths
 api_router.include_router(
-    reports.router, 
-    prefix="/reports", 
-    tags=["Reporting Services"]
-)
-
-# Real-time Data Streaming and Ingestion
-api_router.include_router(
-    data_stream.router, 
-    prefix="/data", 
-    tags=["Data Ingestion"]
-)
-
-# Third-party Enterprise Integration logic
-api_router.include_router(
-    integration.router, 
-    prefix="/integrations", 
-    tags=["External Integrations"]
-)
-
-# System Monitoring and Health Checks
-api_router.include_router(
-    system.router, 
-    prefix="/system", 
-    tags=["System Infrastructure"]
+    paths.router, 
+    prefix="/paths", 
+    tags=["Learning Paths"]
 )
