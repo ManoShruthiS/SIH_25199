@@ -24,7 +24,7 @@ const api: AxiosInstance = axios.create({
 api.interceptors.request.use(
   (config: InternalAxiosRequestConfig) => {
     if (typeof window !== 'undefined') {
-      const token = localStorage.getItem('sih_access_token');
+      const token = localStorage.getItem('authToken');
       if (token && config.headers) {
         config.headers.Authorization = `Bearer ${token}`;
       }
@@ -52,8 +52,8 @@ api.interceptors.response.use(
         case 401:
           // Global logout logic on unauthorized response
           if (typeof window !== 'undefined') {
-            localStorage.removeItem('sih_access_token');
-            localStorage.removeItem('sih_user_data');
+            localStorage.removeItem('authToken');
+            localStorage.removeItem('authUser');
             // Prevent infinite loop if we are already on login
             if (!window.location.pathname.includes('/login')) {
               window.location.href = '/login?reason=expired';
