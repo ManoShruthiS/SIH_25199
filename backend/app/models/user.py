@@ -1,7 +1,7 @@
 import datetime
 
 import sqlalchemy
-from sqlalchemy import Column, Integer, String, Boolean, DateTime
+from sqlalchemy import Column, Integer, String, Boolean, DateTime, ForeignKey
 from sqlalchemy.orm import relationship
 from werkzeug.security import generate_password_hash, check_password_hash
 
@@ -23,6 +23,18 @@ class User(Base):
 
     # Relationships
     learning_paths = relationship("LearningPath", back_populates="user", cascade="all, delete-orphan")
+    skills = relationship("UserSkill", back_populates="user", cascade="all, delete-orphan")
+
+class UserSkill(Base):
+    __tablename__ = "user_skills"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    skill_name = Column(String(100), nullable=False)
+    proficiency_level = Column(Integer, default=1) # 1-5 scale
+    last_used = Column(DateTime, default=datetime.datetime.utcnow)
+    
+    user = relationship("User", back_populates="skills")
 
     def set_password(self, password: str):
         """Hashes the given password and stores it."""

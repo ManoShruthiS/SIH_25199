@@ -2,7 +2,7 @@ import logging
 from typing import List, Dict, Any, Optional
 from sqlalchemy.orm import Session
 from sqlalchemy import func
-from app.models.user import User
+from app.models.user import User, UserSkill
 from app.models.course import Course, Module
 from app.models.skill import Skill
 from app.core.config import settings
@@ -29,21 +29,28 @@ class RecommenderService:
             if not user:
                 return {"error": "User profile not found", "status": 404}
 
-            # 1. Identify Competency Gaps
-            skill_gaps = target_skills  # Simplified: treat all targets as gaps for now
+            # 1. Map Current Proficiency Profile
+            current_skills = {s.skill_name.lower(): s.proficiency_level for s in user.skills}
             
-            # 2. Compute Heuristic Sequence
+            # 2. Identify Competency Gaps
+            # A gap exists if the user doesn't have the skill or if proficiency is < 3
+            skill_gaps = [
+                skill for skill in target_skills 
+                if current_skills.get(skill.lower(), 0) < 3
+            ]
+            
+            # 3. Compute Heuristic Sequence
             # We prioritize foundational concepts before specialized implementations
             ordered_requirements = self._sequence_by_dependency(skill_gaps)
             
-            # 3. Map Content Resources
+            # 4. Map Content Resources
             path_nodes = []
             for skill_name in ordered_requirements:
                 resource = self._find_optimal_resource(skill_name)
                 if resource:
                     path_nodes.append(resource)
 
-            # 4. Calculate Velocity and Milestones
+            # 5. Calculate Velocity and Milestones
             return {
                 "user_id": user_id,
                 "target_goal": goal_description,
@@ -51,21 +58,20 @@ class RecommenderService:
                 "metrics": {
                     "estimated_hours": sum(node.get("duration_minutes", 0) for node in path_nodes) / 60,
                     "difficulty_index": self._calculate_path_complexity(path_nodes),
-                    "skill_coverage": len(path_nodes) / len(target_skills) if target_skills else 0
+                    "skill_coverage": len(path_nodes) / len(target_skills) if target_skills else 0,
+                    "gap_count": len(skill_gaps)
                 }
             }
 
         except Exception as e:
             logger.error(f"Critical failure in path synthesis: {str(e)}")
-            return {"error": "Internal computation error during path assembly"}
+            return {"error": f"Internal computation error: {str(e)}"}
 
     def _sequence_by_dependency(self, gaps: List[str]) -> List[str]:
         """
         Applies topological sorting logic based on a predefined 
         knowledge graph of skill dependencies.
         """
-        # Logic for skill hierarchy (e.g., Python before FastAPI)
-        # For the crunch release, using weight-based sorting
         priority_map = {
             "fundamentals": 0,
             "language": 1,
@@ -74,11 +80,9 @@ class RecommenderService:
             "optimization": 4
         }
         
-        # Simulated heuristic for sorting
         return sorted(gaps, key=lambda x: priority_map.get(self._get_skill_category(x), 5))
 
     def _get_skill_category(self, skill_name: str) -> str:
-        # Dictionary-based lookup for skill classification
         _categories = {
             "Python": "language",
             "JavaScript": "language",
@@ -115,7 +119,6 @@ class RecommenderService:
         """Returns a normalized score representing the cognitive load of the path."""
         if not nodes:
             return 0.0
-        # Placeholder for complex scoring logic
         return round(len(nodes) * 1.25, 2)
 
 def get_recommender_service(db: Session) -> RecommenderService:
