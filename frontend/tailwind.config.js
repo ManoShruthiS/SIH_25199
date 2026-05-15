@@ -9,18 +9,18 @@ module.exports = {
   theme: {
     extend: {
       colors: {
+        border: "hsl(var(--border))",
+        input: "hsl(var(--input))",
+        ring: "hsl(var(--ring))",
+        background: "hsl(var(--background))",
+        foreground: "hsl(var(--foreground))",
+        muted: {
+          DEFAULT: "hsl(var(--muted))",
+          foreground: "hsl(var(--muted-foreground))",
+        },
         primary: {
-          50: '#f0f7ff',
-          100: '#e0effe',
-          200: '#bae0fd',
-          300: '#7cc2fa',
-          400: '#36a1f6',
-          500: '#0c85e9',
-          600: '#0069c7',
-          700: '#0054a1',
-          800: '#054885',
-          900: '#0a3d6e',
-          950: '#062649',
+          DEFAULT: "hsl(var(--primary))",
+          foreground: "hsl(var(--primary-foreground))",
         },
         slate: {
           950: '#020617',

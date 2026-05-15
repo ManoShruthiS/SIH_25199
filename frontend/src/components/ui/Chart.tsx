@@ -48,13 +48,13 @@ interface ChartProps {
   className?: string;
 }
 
-const CustomTooltip = ({ active, payload, label }: TooltipProps<ValueType, NameType>) => {
+const CustomTooltip = ({ active, payload, label }: any) => {
   if (active && payload && payload.length) {
     return (
       <div className="bg-white p-3 border border-slate-200 shadow-lg rounded-md dark:bg-slate-800 dark:border-slate-700">
         <p className="text-sm font-semibold mb-1 text-slate-900 dark:text-slate-100">{label}</p>
         <div className="space-y-1">
-          {payload.map((entry, index) => (
+          {payload.map((entry: any, index: number) => (
             <div key={`item-${index}`} className="flex items-center gap-2 text-xs">
               <div
                 className="w-2 h-2 rounded-full"
